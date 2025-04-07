@@ -3,13 +3,13 @@ import { Router } from 'express';
 export const reservationsRouter = Router();
 
 //GET
-//reservationsRouter.get('/');
+reservationsRouter.get('/getReservations');
 
 //POST
-//reservationsRouter.post('/');
+reservationsRouter.post('/newReservation');
 
 //PUT
-//reservationsRouter.put('/');
+reservationsRouter.put('/editReservation/:id');
 
 //DELETE
-//reservationsRouter.delete('/');
+reservationsRouter.delete('/deleteReservations/:id');

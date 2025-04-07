@@ -6,7 +6,10 @@ export const usersRouter = Router();
 //usersRouter.get('/');
 
 //POST
-//usersRouter.post('/');
+usersRouter.post('/register');
+usersRouter.post('/login');
+usersRouter.post('/logout');
+usersRouter.post('/forgotPassword');
 
 //PUT
-//usersRouter.put('/');
+usersRouter.put('/changePassword');

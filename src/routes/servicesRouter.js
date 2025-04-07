@@ -2,14 +2,14 @@ import { Router } from 'express';
 
 export const servicesRouter = Router();
 
-//GET
-//servicesRouter.get('/');
+// GET
+servicesRouter.get('/getServices');
 
-//POST
-//servicesRouter.post('/');
+// POST
+servicesRouter.post('/newService');
 
-//PUT
-//servicesRouter.put('/');
+// PUT
+servicesRouter.put('/editService/:id');
 
-//DELETE
-//servicesRouter.delete('/');
+// DELETE
+servicesRouter.delete('/deleteService/:id');

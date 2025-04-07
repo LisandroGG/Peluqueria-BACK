@@ -24,6 +24,11 @@ export const Reservation = sequelize.define(
         email: {
             type: DataTypes.STRING,
             allowNull: false,
+        },
+        state: {
+            type: DataTypes.STRING,
+            allowNull: false,
+            defaultValue: "Active"
         }
     },{
         timestamps: false
