@@ -7,4 +7,4 @@ export const mainRouter = Router();
 
 mainRouter.use('/services', servicesRouter);
 mainRouter.use('/reservations', reservationsRouter);
-mainRouter.use('users', usersRouter);
+mainRouter.use('/users', usersRouter);
