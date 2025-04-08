@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { changePassword, forgotPassword, loginUser, logoutUser, registerUser } from '../controllers/usersControllers.js';
 
 export const usersRouter = Router();
 
@@ -6,10 +7,10 @@ export const usersRouter = Router();
 //usersRouter.get('/');
 
 //POST
-//usersRouter.post('/register');
-//usersRouter.post('/login');
-//usersRouter.post('/logout');
-//usersRouter.post('/forgotPassword');
+usersRouter.post('/register', registerUser);
+usersRouter.post('/login', loginUser);
+usersRouter.post('/logout', logoutUser);
+usersRouter.post('/forgotPassword', forgotPassword);
 
 //PUT
-//usersRouter.put('/changePassword');
+usersRouter.put('/changePassword', changePassword);
