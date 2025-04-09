@@ -42,10 +42,10 @@ async function main() {
 };
 
 User.hasMany(Reservation, { foreignKey: "userId" });
-Reservation.belongsTo(User, { foreignKey: "userId", allowNull: true });
+Reservation.belongsTo(User, { foreignKey: "userId", as: 'user' });
 
 Service.hasMany(Reservation, { foreignKey: "serviceId" });
-Reservation.belongsTo(Service, { foreignKey: "serviceId", allowNull: false });
+Reservation.belongsTo(Service, { foreignKey: "serviceId", as: 'service' });
 
 main();
 

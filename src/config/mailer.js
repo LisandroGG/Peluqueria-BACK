@@ -50,4 +50,28 @@ export const sendChangePassword = async(user) => {
         console.error(error);
         return false;
     }
-}
+};
+
+export const sendCancelReservation = async(user, reservation) => {
+    const token = jwt.sign({ reservationId: reservation.reservationId },process.env.JWT_SECRET_KEY,{ expiresIn: '1h' });
+
+    try {
+        await transporter.sendMail({
+            from: `${MAILER_USER}`,
+            to: `${user.email}`,
+            subject: "Cancelar turno",
+            html: `
+                <h2>Hola ${user.name}</h2> 
+                <p>¿Estás seguro que deseas cancelar tu <strong>${reservation.serviceName}</strong> del <strong>${reservation.date}</strong> a las <strong>${reservation.time}</strong>?</p>
+                <p>Si es así, hacé clic en el botón de abajo. De lo contrario, ignorá este correo.</p>
+                <a href="${process.env.LOCALHOST}/cancelReservation?token=${token}"> Cancelar </a>
+                <p>Este enlace caduca en 1 hora.</p>
+            `
+        });
+        return true;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+};
+
