@@ -1,6 +1,5 @@
 import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
-import { parse } from "dotenv";
 
 const {MAILER_USER, MAILER_HOST, MAILER_PORT, MAILER_PASSWORD} = process.env;
 
