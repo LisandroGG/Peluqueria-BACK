@@ -1,20 +1,45 @@
 import jwt from "jsonwebtoken";
 import { User } from "../models/users.js";
 import { comparePassword, hashPassword } from "../helpers/password.js";
-import { sendChangePassword, sendForgotPassword } from "../config/mailer.js";
+import { sendChangePassword, sendForgotPassword, sendRegisterUser } from "../config/mailer.js";
+
+const regexEmail = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+const regexPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,20}$/;
+const regexPhone = /^\+?\d{10,15}$/;
 
 export const registerUser = async(req, res) => {
     const { name, email, phoneNumber, password } = req.body
 
     try {
+        if (!name || !email || !phoneNumber || !password) {
+            return res.status(400).json({ message: 'Todos los campos son obligatorios.' });
+        }
+
+        if (!regexEmail.test(email)) {
+            return res.status(400).json({ message: 'El correo electrónico debe ser un Gmail válido.' });
+        }
+
+        if (!regexPhone.test(phoneNumber)) {
+            return res.status(400).json({ message: 'El número de teléfono no es válido. Debe tener entre 10 y 15 dígitos y puede comenzar con +.' });
+        }
+
+        if (!regexPassword.test(password)) {
+            return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.' });
+        }
+
         const newUser = await User.create({
             name,
             email,
             phoneNumber,
             password,
             role: "user"
-        })
+        });
 
+        const sentMail = await sendRegisterUser(name, email)
+        if(sentMail === false){
+            return res.status(400).json({ message: "Error enviar el correo"})
+        }
+        
         return res.status(201).json({message: "Usuario creado Correctamente", 
             user: {
                 id: newUser.userId,
@@ -23,7 +48,8 @@ export const registerUser = async(req, res) => {
                 phoneNumber: newUser.phoneNumber,
                 role: newUser.role,
             }
-        })
+        });
+
     } catch (error) {
         console.log("Error al registrar usuario")
         res.status(404).json({ message: "Error al crear el usuario"})
@@ -90,6 +116,10 @@ export const logoutUser = async(req, res) => {
 export const forgotPassword = async(req, res) => {
     const { email } = req.body;
 
+    if (!regexEmail.test(email)) {
+        return res.status(400).json({ message: 'El correo electrónico debe ser un Gmail válido.' });
+    }
+
     try {
         const user = await User.findOne({ where: { email } });
         if(!user) return res.status(404).json({ message: "Usuario no encontrado"})
@@ -115,6 +145,10 @@ export const changePassword = async(req,res) => {
         return res.status(400).json({ message: 'Ingrese una contraseña para cambiar'})
     }
 
+    if (!regexPassword.test(newPassword)) {
+        return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.' });
+    }
+
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY)
         const user = await User.findByPk(decoded.userId);
@@ -127,7 +161,7 @@ export const changePassword = async(req,res) => {
         const sentEmail = await sendChangePassword(user);
 
         if(sentEmail === false){
-            return res.status(400).json({ message: "Error enviar el correo de recuperacion"})
+            return res.status(400).json({ message: "Error enviar el correo"})
         }
 
         return res.status(200).json({ message: "Contraseña actualizada correctamente"})

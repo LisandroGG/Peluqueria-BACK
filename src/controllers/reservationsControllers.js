@@ -3,10 +3,10 @@ import { DisabledDate } from "../models/disabledDates.js";
 import { Service } from "../models/services.js"
 import { User } from "../models/users.js"
 import { Op } from "sequelize";
-import { parse, format, isValid } from "date-fns";
+import { parse, format, isValid, isBefore, isAfter, startOfDay, setHours, setMinutes } from 'date-fns';
 import { es } from "date-fns/locale";
 import jwt from 'jsonwebtoken';
-import { sendCancelReservation } from "../config/mailer.js";
+import { sendCancelReservationMail, sendConfirmCancelReservation, sendNewReservation } from "../config/mailer.js";
 
 const generateTimeSlots = () => {
     const slots = [];
@@ -34,52 +34,81 @@ const generateTimeSlots = () => {
 };
 
 export const getAvailableTimes = async (req, res) => {
-    const { date } = req.query;
+  const { date } = req.query;
 
-    try {
-        if (!date) {
-            return res.status(400).json({ message: "Fecha no proporcionada" });
-        }
+  try {
+      if (!date) {
+          return res.status(400).json({ message: "Fecha no proporcionada" });
+      }
 
-        const parsedDate = parse(date, "dd/MM/yyyy", new Date());
+      const parsedDate = parse(date, "dd/MM/yyyy", new Date());
 
-        if (!isValid(parsedDate)) {
-            return res.status(400).json({ message: "Fecha inválida" });
-        }
+      if (!isValid(parsedDate)) {
+          return res.status(400).json({ message: "Fecha inválida" });
+      }
 
-        const formattedDate = format(parsedDate, "yyyy-MM-dd");
+      const today = startOfDay(new Date());
+      const requestedDate = startOfDay(parsedDate);
 
-        const isDisabled = await DisabledDate.findOne({ where: { date: formattedDate } });
+      // 🔒 Bloquear fechas pasadas
+      if (isBefore(requestedDate, today)) {
+          return res.status(400).json({ message: "No se puede consultar fechas pasadas" });
+      }
 
-        if (isDisabled) {
-            return res.status(200).json([]);
-        }
+      // 🕒 Si es hoy y ya pasaron todos los turnos
+      if (+requestedDate === +today) {
+          const now = new Date();
+          const lastSlot = setHours(setMinutes(today, 30), 20); // 20:30
+          if (isAfter(now, lastSlot)) {
+              return res.status(200).json([]); // Ya cerró hoy
+          }
+      }
 
-        const reservations = await Reservation.findAll({
-            where: {
-                reservationDate: {
-                    [Op.gte]: new Date(`${formattedDate}T00:00:00`),
-                    [Op.lt]: new Date(`${formattedDate}T23:59:59`)
-                },
-                state: 'Active'
-            }
-        });
+      const formattedDate = format(parsedDate, "yyyy-MM-dd");
 
-        const reservedTimes = reservations.map(r => {
-            const d = new Date(r.reservationDate);
-            const hours = String(d.getHours()).padStart(2, "0");
-            const minutes = String(d.getMinutes()).padStart(2, "0");
-            return `${hours}:${minutes}`;
-        });
+      const isDisabled = await DisabledDate.findOne({ where: { date: formattedDate } });
+      if (isDisabled) {
+          return res.status(200).json([]);
+      }
 
-        const slots = generateTimeSlots();
-        const available = slots.filter(t => !reservedTimes.includes(t));
+      const reservations = await Reservation.findAll({
+          where: {
+              reservationDate: {
+                  [Op.gte]: new Date(`${formattedDate}T00:00:00`),
+                  [Op.lt]: new Date(`${formattedDate}T23:59:59`)
+              },
+              state: 'Active'
+          }
+      });
 
-        return res.status(200).json(available);
-    } catch (error) {
-        console.error("Error al obtener horarios disponibles:", error);
-        return res.status(500).json({ message: "Error interno del servidor" });
-    }
+      const reservedTimes = reservations.map(r => {
+          const d = new Date(r.reservationDate);
+          const hours = String(d.getHours()).padStart(2, "0");
+          const minutes = String(d.getMinutes()).padStart(2, "0");
+          return `${hours}:${minutes}`;
+      });
+
+      const allSlots = generateTimeSlots(); // Todos los turnos posibles
+
+      // ⚠️ Si es hoy, filtramos los que ya pasaron según la hora actual
+      let availableSlots = allSlots;
+      if (+requestedDate === +today) {
+          const now = new Date();
+          availableSlots = allSlots.filter(slot => {
+              const [h, m] = slot.split(":");
+              const slotDate = setHours(setMinutes(new Date(), Number(m)), Number(h));
+              return isAfter(slotDate, now);
+          });
+      }
+
+      // Quitamos los horarios ya reservados
+      const finalAvailable = availableSlots.filter(t => !reservedTimes.includes(t));
+
+      return res.status(200).json(finalAvailable);
+  } catch (error) {
+      console.error("Error al obtener horarios disponibles:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+  }
 };
 
 export const newReservation = async (req, res) => {
@@ -141,7 +170,19 @@ export const newReservation = async (req, res) => {
         userId,
     });
 
-        return res.status(201).json({ message: "Reserva creada correctamente", reservation });
+    const formattedTime = format(parsedDate, "HH:mm");
+    const mailSent = await sendNewReservation(
+      finalName,
+      finalEmail,
+      service.serviceName,
+      date,
+      formattedTime
+    );
+
+    if (mailSent) {
+      return res.status(200).json({ message: "Reserva creada correctamente" });
+    }
+
     } catch (error) {
         console.error("Error al crear reserva:", error);
         return res.status(500).json({ message: "Error al crear la reserva" });
@@ -166,7 +207,7 @@ export const getReservations = async (req, res) => {
             ],
             order: [['reservationDate', 'DESC']]
           });
-  
+
       const formatted = reservations.map(r => ({
         reservationId: r.reservationId,
         clientName: r.clientName,
@@ -177,7 +218,7 @@ export const getReservations = async (req, res) => {
         service: r.service ? r.service.serviceName : null,
         state: r.state,
       }));
-  
+
       return res.status(200).json(formatted);
     } catch (error) {
       console.error('Error al obtener reservas:', error);
@@ -185,7 +226,7 @@ export const getReservations = async (req, res) => {
     }
   };
 
-  export const getReservationsByDate = async (req, res) => {
+export const getReservationsByDate = async (req, res) => {
     const { date } = req.query; 
   
     if (!date) {
@@ -222,49 +263,49 @@ export const getReservations = async (req, res) => {
         ],
         order: [["reservationDate", "ASC"]]
       });
+
+    const formatted = reservations.map(r => ({
+      reservationId: r.reservationId,
+      clientName: r.clientName,
+      email: r.email,
+      phoneNumber: r.phoneNumber,
+      date: format(r.reservationDate, "dd/MM/yyyy", { locale: es }),
+      time: format(r.reservationDate, "HH:mm"),
+      service: r.service?.serviceName || null,
+      state: r.state
+    }));
   
-      const formatted = reservations.map(r => ({
-        reservationId: r.reservationId,
-        clientName: r.clientName,
-        email: r.email,
-        phoneNumber: r.phoneNumber,
-        date: format(r.reservationDate, "dd/MM/yyyy", { locale: es }),
-        time: format(r.reservationDate, "HH:mm"),
-        service: r.service?.serviceName || null,
-        state: r.state
-      }));
-  
-      return res.status(200).json(formatted);
+    return res.status(200).json(formatted);
     } catch (error) {
       console.error("Error al obtener reservas por fecha:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
     }
-  };
+};
 
-  export const updateReservationState = async (req, res) => {
+export const updateReservationState = async (req, res) => {
     const { reservationId } = req.params;
-  
+
     try {
       const reservation = await Reservation.findByPk(reservationId);
-  
+
       if (!reservation) {
         return res.status(404).json({ message: "Reserva no encontrada" });
       }
-  
+
       reservation.state = "Finish";
       await reservation.save();
-  
+
       return res.status(200).json({ message: "Estado actualizado correctamente", reservation });
     } catch (error) {
       console.error("Error al actualizar el estado de la reserva:", error);
       return res.status(500).json({ message: "Error al actualizar estado" });
     }
-  };
+};
 
 
 export const sendCancelEmail = async (req, res) => {
     const { reservationId } = req.body;
-  
+
     if (!reservationId) {
       return res.status(400).json({ message: "Falta el ID de la reserva" });
     }
@@ -279,13 +320,12 @@ export const sendCancelEmail = async (req, res) => {
       if (!reservation) {
         return res.status(404).json({ message: "Reserva no encontrada" });
       }
-  
-      // Si tiene userId (reserva hecha por usuario logueado)
+
       let user = {
         name: reservation.clientName,
         email: reservation.email
       };
-  
+
       if (reservation.userId) {
         const foundUser = await User.findByPk(reservation.userId);
         if (foundUser) {
@@ -295,17 +335,17 @@ export const sendCancelEmail = async (req, res) => {
           };
         }
       }
-  
+
       const formattedDate = format(reservation.reservationDate, 'dd/MM/yyyy');
       const formattedTime = format(reservation.reservationDate, 'HH:mm');
-  
-      const mailSent = await sendCancelReservation(user, {
+
+      const mailSent = await sendCancelReservationMail(user, {
         reservationId: reservation.reservationId,
         date: formattedDate,
         time: formattedTime,
         serviceName: reservation.service?.serviceName
       });
-  
+
       if (mailSent) {
         return res.status(200).json({ message: "Correo de cancelación enviado" });
       } else {
@@ -315,43 +355,73 @@ export const sendCancelEmail = async (req, res) => {
       console.error("Error al enviar correo de cancelación:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
     }
-  };
+};
 
-  export const cancelReservation = async (req, res) => {
+export const cancelReservation = async (req, res) => {
     const { token } = req.query;
-  
+
     if (!token) {
       return res.status(400).json({ message: "Token no proporcionado" });
     }
-  
+
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
       const reservationId = decoded.reservationId;
-  
-      const reservation = await Reservation.findByPk(reservationId);
-  
+
+      const reservation = await Reservation.findByPk(reservationId, {
+        include: [
+            { model: Service, as: "service" }
+        ]
+      });
+
       if (!reservation) {
         return res.status(404).json({ message: "Reserva no encontrada" });
       }
-  
+
       if (reservation.state === "Finish") {
         return res.status(400).json({ message: "Esta reserva ya finalizó" });
       }
-  
-      // ✅ Elimina la reserva directamente
+
+      let user = {
+        name: reservation.clientName,
+        email: reservation.email
+      };
+
+      if (reservation.userId) {
+        const foundUser = await User.findByPk(reservation.userId);
+        if (foundUser) {
+          user = {
+            name: foundUser.name,
+            email: foundUser.email
+          };
+        }
+      }
+
+      const formattedDate = format(reservation.reservationDate, 'dd/MM/yyyy');
+      const formattedTime = format(reservation.reservationDate, 'HH:mm');
+
       await reservation.destroy();
-  
+
+      const mailSent = await sendConfirmCancelReservation(user, {
+        date: formattedDate,
+        time: formattedTime,
+        serviceName: reservation.service?.serviceName
+      })
+
+      if(mailSent === false){
+        return res.status(400).json({ message: "Error enviar el correo"})
+      }
+
       return res.status(200).json({ message: "Reserva cancelada y eliminada correctamente" });
     } catch (error) {
       console.error("Error al cancelar con token:", error);
       return res.status(401).json({ message: "Token inválido o expirado" });
     }
-  };
+};
 
-  export const getReservationsByEmail = async (req, res) => {
+export const getReservationsByEmail = async (req, res) => {
     let emailFromRequest = req.query.email;
-  
-    // Si está logueado, usamos su email del token
+
     if (req.user && req.user.email) {
       emailFromRequest = req.user.email;
     }
@@ -359,7 +429,7 @@ export const sendCancelEmail = async (req, res) => {
     if (!emailFromRequest) {
       return res.status(400).json({ message: "Falta el email" });
     }
-  
+
     try {
       const reservations = await Reservation.findAll({
         where: { email: emailFromRequest },
@@ -368,11 +438,11 @@ export const sendCancelEmail = async (req, res) => {
         ],
         order: [["reservationDate", "ASC"]]
       });
-  
+
       if (reservations.length === 0) {
         return res.status(404).json({ message: "No tienes reservas disponibles" });
       }
-  
+
       const formatted = reservations.map(r => ({
         reservationId: r.reservationId,
         clientName: r.clientName,
@@ -382,10 +452,10 @@ export const sendCancelEmail = async (req, res) => {
         time: format(r.reservationDate, "HH:mm"),
         service: r.service?.serviceName || null,
       }));
-  
+
       return res.status(200).json(formatted);
     } catch (error) {
       console.error("Error al obtener reservas por email:", error);
       return res.status(500).json({ message: "Error al buscar reservas" });
     }
-  };
+};
