@@ -27,6 +27,12 @@ export const registerUser = async(req, res) => {
             return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.' });
         }
 
+        const user = await User.findOne({ where : { email }});
+
+        if(user) {
+            return res.status(400).json({ message: 'Este gmail ya esta registrado'})
+        }
+
         const newUser = await User.create({
             name,
             email,
@@ -70,24 +76,30 @@ export const loginUser = async(req, res) => {
             return res.status(401).json({ message: "Contraseña incorrecta" });
         }
 
-        const token = jwt.sign(
-            {
-                userId: user.userId,
-                role: user.role,
-                email: user.email,
-            },
-            process.env.JWT_SECRET_KEY,
-            { expiresIn: "2h" }
-        );
+        const payload = {
+            userId: user.userId,
+            role: user.role,
+            email: user.email,
+        }
 
-        res.cookie("token", token, {
+        const access_token = jwt.sign(payload, process.env.JWT_SECRET_KEY, { expiresIn: "2h"});
+        const refresh_token = jwt.sign(payload, process.env.JWT_REFRESH_SECRET_KEY, { expiresIn: "30d"})
+
+        res.cookie("token", access_token, {
             httpOnly: true,
             sameSite: "Lax",
+            maxAge: 2 * 60 * 60 * 1000 //2 hours
             });
+        
+        res.cookie("refreshToken", refresh_token, {
+            httpOnly: true,
+            sameSite: "Lax",
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        });
 
         return res.status(200).json({
             message: "Login exitoso",
-            token,
+            token: access_token,
             user: {
                 userId: user.userId,
                 name: user.name,
@@ -100,12 +112,41 @@ export const loginUser = async(req, res) => {
     }
 };
 
+export const refreshAccessToken = async (req, res) => {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+        return res.status(401).json({ message: "Refresh token no encontrado" });
+    }
+
+    try {
+        const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET_KEY);
+
+        const newAccessToken = jwt.sign({
+            userId: decoded.userId,
+            email: decoded.email,
+            role: decoded.role,
+        }, process.env.JWT_SECRET_KEY, {
+            expiresIn: "2h"
+        });
+
+        res.cookie("token", newAccessToken, {
+            httpOnly: true,
+            sameSite: "Lax",
+            maxAge: 2 * 60 * 60 * 1000,
+        });
+
+        return res.status(200).json({ token: newAccessToken });
+
+    } catch (error) {
+        return res.status(403).json({ message: "Refresh token inválido o expirado" });
+    }
+};
+
 export const logoutUser = async(req, res) => {
     try {
-        res.clearCookie("token", {
-            httpOnly: true,
-            sameSite: "Lax"
-        });
+        res.clearCookie("token");
+        res.clearCookie("refreshToken")
         res.status(200).json({ message: "Sesion cerrada exitosamente" });
     } catch (error) {
         console.error("Error en logout:", error);
