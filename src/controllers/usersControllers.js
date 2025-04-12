@@ -225,6 +225,7 @@ export const getMe = async (req, res) => {
 				userId: user.userId,
 				name: user.name,
 				email: user.email,
+                phoneNumber: user.phoneNumber,
 				role: user.role,
 			},
 		});
