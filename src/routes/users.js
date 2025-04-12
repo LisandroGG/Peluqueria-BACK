@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { changePassword, forgotPassword, loginUser, logoutUser, registerUser, refreshAccessToken } from '../controllers/usersControllers.js';
+import { changePassword, forgotPassword, loginUser, logoutUser, registerUser, refreshAccessToken, getMe } from '../controllers/usersControllers.js';
 
 export const usersRouter = Router();
 
 //GET
-//usersRouter.get('/');
+usersRouter.get('/me', getMe)
 
 //POST
 usersRouter.post('/register', registerUser);

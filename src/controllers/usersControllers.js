@@ -211,3 +211,24 @@ export const changePassword = async(req,res) => {
     }
 };
 
+export const getMe = async (req, res) => {
+	const token = req.cookies.token;
+	if (!token) return res.status(401).json({ message: "No autenticado" });
+
+	try {
+		const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+		const user = await User.findByPk(decoded.userId);
+		if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+
+		return res.status(200).json({
+			user: {
+				userId: user.userId,
+				name: user.name,
+				email: user.email,
+				role: user.role,
+			},
+		});
+	} catch (error) {
+		return res.status(401).json({ message: "Token expirado o inválido" });
+	}
+};
