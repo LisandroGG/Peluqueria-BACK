@@ -46,7 +46,7 @@ export const registerUser = async(req, res) => {
             return res.status(400).json({ message: "Error enviar el correo"})
         }
         
-        return res.status(201).json({message: "Usuario creado Correctamente", 
+        return res.status(201).json({message: "Cuenta creada exitosamente!", 
             user: {
                 id: newUser.userId,
                 name: newUser.name,
@@ -57,8 +57,8 @@ export const registerUser = async(req, res) => {
         });
 
     } catch (error) {
-        console.log("Error al registrar usuario")
-        res.status(404).json({ message: "Error al crear el usuario"})
+        console.log("Error al crear cuenta, intenta nuevamente")
+        res.status(404).json({ message: "Error al crear cuenta, intenta nuevamente"})
     }
 };
 
@@ -98,7 +98,7 @@ export const loginUser = async(req, res) => {
         });
 
         return res.status(200).json({
-            message: "Login exitoso",
+            message: "Inicio de sesion exitoso!",
             token: access_token,
             user: {
                 userId: user.userId,
@@ -107,8 +107,8 @@ export const loginUser = async(req, res) => {
             },
         });
     } catch (error) {
-        console.error("Error en login:", error);
-        return res.status(500).json({ message: "Error interno del servidor" });
+        console.error("Error al iniciar sesion, intenta nuevamente", error);
+        return res.status(500).json({ message: "Error al iniciar sesion, intenta nuevamente" });
     }
 };
 
@@ -174,7 +174,7 @@ export const forgotPassword = async(req, res) => {
         return res.status(200).json({ message: "Se envio un correo de restablecer contraseña"})
     } catch (error) {
         console.log(error)
-        res.status(500).json({ message: "Error al enviar mail de recuperacion (server)"})
+        res.status(500).json({ message: "Error al enviar correo de recuperacion(server)"})
     }
 };
 
@@ -202,12 +202,12 @@ export const changePassword = async(req,res) => {
         const sentEmail = await sendChangePassword(user);
 
         if(sentEmail === false){
-            return res.status(400).json({ message: "Error enviar el correo"})
+            return res.status(400).json({ message: "Error enviar el correo de actualizacion"})
         }
 
         return res.status(200).json({ message: "Contraseña actualizada correctamente"})
     } catch (error) {
-        return res.status(400).json({ message: "Token invalido o expirado"})
+        return res.status(400).json({ message: "Link expirado, por favor genere otro"})
     }
 };
 
