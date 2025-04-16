@@ -10,7 +10,7 @@ export const getService = async(req, res) => {
 
         return res.status(200).json(services)
     } catch (error) {
-        return res.status(500).json({ message: "Error interno del servidor" });
+        return res.status(500).json({ message: "Error interno del servidor", error });
     }
 };
 
@@ -22,10 +22,17 @@ export const newService = async(req, res) => {
     }
 
     try {
+
+        const existingService = await Service.findOne({ where: { serviceName } });
+
+		if (existingService) {
+			return res.status(409).json({ message: "El nombre del servicio ya está registrado" });
+		}
+
         const newService = await Service.create({ serviceName, serviceCost });
 
         return res.status(201).json({ 
-            message: "Servicio creado correctamente", 
+            message: "Servicio creado correctamente!", 
             service: newService 
         });
     } catch (error) {
