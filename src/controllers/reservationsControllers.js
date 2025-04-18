@@ -205,7 +205,7 @@ export const getReservations = async (req, res) => {
                 attributes: ['serviceName'],
               }
             ],
-            order: [['reservationDate', 'DESC']]
+            order: [['reservationDate', 'ASC']]
           });
 
       const formatted = reservations.map(r => ({
